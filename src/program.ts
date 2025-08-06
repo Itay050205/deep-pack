@@ -7,7 +7,8 @@ import PackageJsonLoader from "npm-package-json-loader";
 import { IPackageJson } from '@ts-type/package-dts';
 import Package from "./package";
 import Dependencies, { Events as DependenciesEvents } from "./dependencies";
-import fs from "fs";
+import fs from "node:fs";
+import fsPromises from "node:fs/promises";
 import { EOL } from "os";
 
 enum ExitCodes {
@@ -23,6 +24,8 @@ enum Files {
 enum OptionNames {
     MAX_DEPTH = "max_depth",
     DEV_DEPS = "dev",
+    PEER_DEPS = "peer",
+    OPTIONAL_DEPS = "optional",
     OUT_DEPS = "out_deps",
     OUT_RESOLVED_DEPS = "out_resolved_deps",
     RESUME_LAST_RUN = "resume_last_run",
@@ -30,6 +33,8 @@ enum OptionNames {
 interface Options {
     max_depth: number;
     dev_deps: boolean;
+    peer_deps: boolean;
+    optional_deps: boolean;
     out_deps: boolean;
     out_resolved_deps: boolean;
     resume_last_run: boolean;
@@ -37,6 +42,8 @@ interface Options {
 const defaultOptions: Options = {
     max_depth: Infinity,
     dev_deps: false,
+    peer_deps: true,
+    optional_deps: false,
     out_deps: false,
     out_resolved_deps: true,
     resume_last_run: true
@@ -63,7 +70,7 @@ export default class Program {
     }
     constructor() {
     }
-    protected loadSelfPacakgeJSON() {
+    protected loadSelfPackageJSON() {
         const pkgJsonPath = path.resolve(__dirname, "..", "package.json");
         const packageJSON = new PackageJsonLoader(pkgJsonPath);
         this.packageJSONData = packageJSON.data;
@@ -115,16 +122,16 @@ export default class Program {
             // ------------------- UI -------------------
         });
 
-        await dependencies.load(this.options.max_depth, this.options.dev_deps);
+        await dependencies.load(this.options.max_depth, this.options.dev_deps, this.options.peer_deps, this.options.optional_deps);
         if (!rootPackage!.resolved) {
             this.writeToShell("=========================================================", undefined, chalk.yellow);  // TODO: support === printing
             this.writeToShell("please run again. there are more dependencies to resolve.", undefined, chalk.yellow);  // TODO: support run until finished
             this.writeToShell("=========================================================", undefined, chalk.yellow);  // TODO: support === printing
         } 
     }
-    resumeLastRun() {
+    async resumeLastRun() {
         try {
-            const resolvedPkgsSeparatedByNewLine = fs.readFileSync(path.resolve(process.cwd(), Files.RESOLVED_DEPS)).toString();
+            const resolvedPkgsSeparatedByNewLine = (await fsPromises.readFile(path.resolve(process.cwd(), Files.RESOLVED_DEPS))).toString();
             const resolvedPkgs: PackageFullName[] = resolvedPkgsSeparatedByNewLine.split(EOL);
             Package.fillCacheByFullNames(resolvedPkgs);
         }
@@ -149,11 +156,13 @@ export default class Program {
         });
     }
     protected setArgs() {
-        program.arguments("<pacakge_name>");
+        program.arguments("<package_name>");
     }
     protected setOptions() {
         program.option(`-d, --${OptionNames.MAX_DEPTH} <depth>`, "max depth. | integer bigger than 1", this.options.max_depth.toString())
         program.option(`--${OptionNames.DEV_DEPS}`, "resolve devDependencies", this.options.dev_deps.toString())
+        program.option(`--${OptionNames.PEER_DEPS}`, "resolve peerDependencies", this.options.peer_deps.toString())
+        program.option(`--${OptionNames.OPTIONAL_DEPS}`, "resolve optionalDependencies", this.options.optional_deps.toString())
         program.option(`--${OptionNames.OUT_DEPS} <out>`, "export dependencies list?", this.options.out_deps)
         program.option(`--${OptionNames.OUT_RESOLVED_DEPS} <out>`, "export resolved dependencies list?", this.options.out_resolved_deps)
         program.option(`-re, --${OptionNames.RESUME_LAST_RUN} <resume>`, "resume last run?", this.options.resume_last_run)
@@ -168,9 +177,10 @@ export default class Program {
         this.clearShell();
         this.writeToShell('deep-pack-cli', { horizontalLayout: 'controlled smushing' });
         try {
-            this.loadSelfPacakgeJSON();
-        } catch (error) {
-            this.exit(ExitCodes.GENERAL_ERROR, error);
+            this.loadSelfPackageJSON();
+        } catch (error: unknown) {
+            if(error instanceof Error) this.exit(ExitCodes.GENERAL_ERROR, error.message);
+            else this.exit(ExitCodes.GENERAL_ERROR, "Unknown cause")
         }
         this.showIntro();
         this.setArgs();
@@ -184,7 +194,7 @@ export default class Program {
             chalkFunc = chalk.white;
         }
 
-        if (options !== undefined || Object.keys(options).length === 0) {
+        if (!options || Object.keys(options).length === 0) {
             text = figlet.textSync(text, options!);
         }
         console.log(chalkFunc!(text));

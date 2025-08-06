@@ -6,6 +6,8 @@ type APIVersionResponse = {
     dependencies?: object; // used
     description?: string;
     devDependencies?: object;
+    peerDependencies?: object;
+    optionalDependencies?: object;
     directories?: object;
     dist?: { shasum: string, tarball: string; }; // used
     engines?: object;

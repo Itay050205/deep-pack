@@ -3,16 +3,16 @@
 import fetch, { Response } from "node-fetch";
 import npmPackageArg from "npm-package-arg";
 import semver from "semver";
-import fs from "fs";
+import fsPromises from "node:fs/promises";
 import path from "path";
 import { StatusCode } from "status-code-enum";
 import { TriState, TriStates } from "./tristate";
 import latestSemver from "latest-semver";
 
 type APIRequest = {
-    name: PackageName,
-    version?: PackageVersion
-}
+    name: PackageName;
+    version?: PackageVersion;
+};
 
 export const LATEST: PackageVersion = "latest";
 
@@ -22,25 +22,35 @@ enum Errors {
     PACKAGE_DOESNT_EXIST_IN_REGISTRY = "package doesn't exist in registry",
     TOO_MANY_FAILURES = "too many failures",
     UNKNOWN_ERROR = "unknown error",
-    VERSION_DOESNT_EXIST_IN_REGISTRY = "version doesn't exist in registry"
+    VERSION_DOESNT_EXIST_IN_REGISTRY = "version doesn't exist in registry",
 }
 
 function fullNameByNameAndVersion(name: string, version: string): PackageFullName {
     return `${name}@${version}`;
 }
 function compactResponse(apiResponse: APIResponse) {
-    Object.getOwnPropertyNames(apiResponse).forEach(key => {
-        // ---- for maintaing static referencing: -----
+    Object.getOwnPropertyNames(apiResponse).forEach((key) => {
+        // ---- for maintaining static referencing: -----
         (<APIPackageResponse>apiResponse).versions;
         (<APIPackageResponse>apiResponse)["dist-tags"];
         (<APIVersionResponse>apiResponse).dist;
         (<APIVersionResponse>apiResponse).dependencies;
         (<APIVersionResponse>apiResponse).devDependencies;
+        (<APIVersionResponse>apiResponse).peerDependencies;
+        (<APIVersionResponse>apiResponse).optionalDependencies;
         // --------------------------------------------
-        if(key === "versions" || key === "dist" || key === "dependencies" || key === "devDependencies" || key === "dist-tags") {
+        if (
+            key === "versions" ||
+            key === "dist" ||
+            key === "dependencies" ||
+            key === "devDependencies" ||
+            key === "peerDependencies" ||
+            key === "optionalDependencies" ||
+            key === "dist-tags"
+        ) {
             return;
         }
-        delete (<{ [key: string] : any }>apiResponse)[key];
+        delete (<{ [key: string]: any }>apiResponse)[key];
     });
 }
 export default class Package {
@@ -82,7 +92,7 @@ export default class Package {
         }
     }
 
-    public dependentOrDependentsToString() : string {
+    public dependentOrDependentsToString(): string {
         switch (this.dependents.length) {
             case 0:
                 return "";
@@ -98,7 +108,7 @@ export default class Package {
         }
         // console.log(`downloading ${this}...`);
         let triesCount = 0;
-        let tgzFileData: Buffer;
+        let tgzFileData: Buffer | null = null;
         do {
             try {
                 const response = await fetch(this.tarballURL!);
@@ -110,21 +120,23 @@ export default class Package {
                 // TODO: different errors
             }
         } while (++triesCount < Package.MAX_TRIES);
-        if (triesCount == Package.MAX_TRIES) throw "`downloading ${this} failed`";
-        fs.writeFileSync(path.resolve(process.cwd(), this.tgzFileName), tgzFileData!);
+        if (triesCount == Package.MAX_TRIES || !tgzFileData) throw new Error(`downloading ${this} failed`);
+        await fsPromises.writeFile(path.resolve(process.cwd(), `${this.name.replace("/", "_")}-${this.version}.tgz`), tgzFileData.toString());
         // TODO: add shasum check.
     }
-    async getDependencies(includeDevDependencies: boolean): Promise<Package[]> {
+    async getDependencies(includeDevDependencies: boolean, includePeerDependencies: boolean, includeOptionalDependencies: boolean): Promise<Package[]> {
         this.loading = true;
         const result: Package[] = [];
         let responseBodyAsJSON: APIVersionResponse;
         try {
-            responseBodyAsJSON = <APIVersionResponse> await Package.apiRequest({ name: this.name, version: this.version });
+            responseBodyAsJSON = <APIVersionResponse>(
+                await Package.apiRequest({ name: this.name, version: this.version })
+            );
         } catch (error) {
             switch (error) {
                 case Errors.PACKAGE_DOESNT_EXIST_IN_REGISTRY:
                     this.existsInRegistry = false;
-                    console.log(`pacakge ${this} doesn't exist`);
+                    console.log(`package ${this} doesn't exist`);
                     return result;
                 case Errors.VERSION_DOESNT_EXIST_IN_REGISTRY:
                     this.existsInRegistry = false;
@@ -136,20 +148,30 @@ export default class Package {
                     throw error;
             }
         }
-        if(!responseBodyAsJSON) { // just in case. shouldn't happen.
+        if (!responseBodyAsJSON) {
+            // just in case. shouldn't happen.
             this.error = true;
             this.loading = false;
             throw Errors.UNKNOWN_ERROR;
         }
         this.tarballURL = responseBodyAsJSON!.dist?.tarball;
-        if (responseBodyAsJSON!.dependencies == undefined) { // special case: dependencies node doesn't exist, but tarball exists.
+        if (responseBodyAsJSON!.dependencies == undefined) {
+            // special case: dependencies node doesn't exist, but tarball exists.
             return result;
         }
 
         const selectedDependencies = Object.entries(responseBodyAsJSON!.dependencies);
 
-        if (includeDevDependencies && responseBodyAsJSON!.devDependencies != undefined) {
-            selectedDependencies.push(...Object.entries(responseBodyAsJSON!.devDependencies));
+        if (includeDevDependencies && responseBodyAsJSON.devDependencies) {
+            selectedDependencies.push(...Object.entries(responseBodyAsJSON.devDependencies));
+        }
+
+        if (includePeerDependencies && responseBodyAsJSON.peerDependencies) {
+            selectedDependencies.push(...Object.entries(responseBodyAsJSON.peerDependencies));
+        }
+
+        if (includeOptionalDependencies && responseBodyAsJSON.optionalDependencies) {
+            selectedDependencies.push(...Object.entries(responseBodyAsJSON.optionalDependencies));
         }
 
         for (const pkg of selectedDependencies) {
@@ -188,33 +210,39 @@ export default class Package {
         const cachedResponse = Package.apiCache.get(apiRequest.name);
         if (cachedResponse) {
             // ----- package requested, not specific version -----
-            if(!apiRequest.version) {
+            if (!apiRequest.version) {
                 return cachedResponse;
             }
             // ---------------------------------------------------
             // ----------- specific version requested ------------
-            if(!(<APIPackageResponse> cachedResponse ).versions) {
+            if (!(<APIPackageResponse>cachedResponse).versions) {
                 throw Errors.VERSION_DOESNT_EXIST_IN_REGISTRY;
             }
             if (apiRequest.version === LATEST) {
                 //  --------------------------------- calculate last version by dist tag ----------------------------------
-                const latestVersionNameByDistTag = (<APIPackageResponse> cachedResponse )["dist-tags"]?.latest;
-                let latestVersionByDistTag : APIVersionResponse | undefined;
-                if(latestVersionNameByDistTag) {
-                    latestVersionByDistTag = (<APIPackageResponse> cachedResponse ).versions![latestVersionNameByDistTag!];
-                } 
+                const latestVersionNameByDistTag = (<APIPackageResponse>cachedResponse)["dist-tags"]?.latest;
+                let latestVersionByDistTag: APIVersionResponse | undefined;
+                if (latestVersionNameByDistTag) {
+                    latestVersionByDistTag = (<APIPackageResponse>cachedResponse).versions![
+                        latestVersionNameByDistTag!
+                    ];
+                }
                 // --------------------------------------------------------------------------------------------------------
-                if(latestVersionByDistTag) { // calculation by last version by dist tag succeeded
+                if (latestVersionByDistTag) {
+                    // calculation by last version by dist tag succeeded
                     return latestVersionByDistTag;
-                } else { // calculation by last version by dist tag failed
+                } else {
+                    // calculation by last version by dist tag failed
                     //  ---------------------------------- calculate last version by semver -----------------------------------
-                    const latestVersionBySemver = latestSemver(Object.keys((<APIPackageResponse> cachedResponse ).versions!))!;
-                    return (<APIPackageResponse> cachedResponse ).versions![latestVersionBySemver];
+                    const latestVersionBySemver = latestSemver(
+                        Object.keys((<APIPackageResponse>cachedResponse).versions!)
+                    )!;
+                    return (<APIPackageResponse>cachedResponse).versions![latestVersionBySemver];
                     // --------------------------------------------------------------------------------------------------------
                 }
             } else {
-                const versionResponse = (<APIPackageResponse> cachedResponse ).versions![apiRequest.version!];
-                if(!versionResponse) {
+                const versionResponse = (<APIPackageResponse>cachedResponse).versions![apiRequest.version!];
+                if (!versionResponse) {
                     throw Errors.VERSION_DOESNT_EXIST_IN_REGISTRY;
                 }
                 return versionResponse;
@@ -243,10 +271,11 @@ export default class Package {
                     case StatusCode.ClientErrorNotFound:
                         if (apiRequest.version === "" || apiRequest.version === LATEST) {
                             throw Errors.PACKAGE_DOESNT_EXIST_IN_REGISTRY;
-                        }
-                        else {
+                        } else {
                             try {
-                                const fullResponse = <APIPackageResponse> await Package.apiRequest({ name: apiRequest.name });
+                                const fullResponse = <APIPackageResponse>(
+                                    await Package.apiRequest({ name: apiRequest.name })
+                                );
                                 if (!fullResponse.versions) {
                                     throw Errors.PACKAGE_DOESNT_EXIST_IN_REGISTRY;
                                 }
@@ -261,14 +290,13 @@ export default class Package {
                                         continue;
                                 }
                             }
-
                         }
                     default:
                         throw response.statusText;
                 }
             }
             try {
-                apiResponse = await <APIResponse>(<unknown>(response.json()));
+                apiResponse = await (<APIResponse>(<unknown>response.json()));
                 if (!apiResponse) {
                     continue;
                 }
@@ -306,22 +334,26 @@ export default class Package {
             return result;
         }
     }
-    public static async fromSemanticVersion(name: PackageName, semanticVersion: PackageSemanticVersion): Promise<Package> {
+    public static async fromSemanticVersion(
+        name: PackageName,
+        semanticVersion: PackageSemanticVersion
+    ): Promise<Package> {
         let version: string = semanticVersion;
         if (semanticVersion === "*") {
             version = LATEST;
-        } else if (semanticVersion.includes("^") ||
+        } else if (
+            semanticVersion.includes("^") ||
             semanticVersion.includes("~") ||
             semanticVersion.includes(">") ||
             semanticVersion.includes("<") ||
             semanticVersion.includes("-") ||
             semanticVersion.includes("||") ||
             semanticVersion.includes("=v") ||
-            semanticVersion.includes(".x")) {
+            semanticVersion.includes(".x")
+        ) {
             let apiResponse: APIResponse;
             try {
-                apiResponse = <APIPackageResponse> await Package.apiRequest({ name: name });
-
+                apiResponse = <APIPackageResponse>await Package.apiRequest({ name: name });
             } catch (error) {
                 throw error;
             }
@@ -331,12 +363,11 @@ export default class Package {
         }
         return this.fromNameAndVersion(name, version);
     }
-    static fromString(pacakgeNameInAnyFormat: string): Package | undefined {
+    static fromString(packageNameInAnyFormat: string): Package | undefined {
         try {
-            const pacakgeArgResult = npmPackageArg(pacakgeNameInAnyFormat);
-            const packageName: string = pacakgeArgResult.name!;
-            const packageVersion: string | undefined =
-                pacakgeArgResult.fetchSpec ?? LATEST;
+            const packageArgResult = npmPackageArg(packageNameInAnyFormat);
+            const packageName: string = packageArgResult.name!;
+            const packageVersion: string | undefined = packageArgResult.fetchSpec ?? LATEST;
             return Package.fromNameAndVersion(packageName, packageVersion);
         } catch (ex) {
             return undefined;

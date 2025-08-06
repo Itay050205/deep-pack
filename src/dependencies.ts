@@ -10,14 +10,14 @@ export enum Events {
 export type ResolveAction = (pkg: Package) => Promise<boolean>;
 export default class Dependencies extends EventEmitter {
     rootPackage: Package;
-    async loadRecursive(pkg: Package, level: number, depth: number, loadDevDependencies: boolean) {
+    async loadRecursive(pkg: Package, level: number, depth: number, loadDevDependencies: boolean, loadPeerDependencies: boolean, loadOptionalDependencies: boolean) {
         // ------------------- UI -------------------
         const dependentOrDependentsStr = pkg.dependentOrDependentsToString()
         console.log(`requested ${pkg} by ${dependentOrDependentsStr !== "" ? dependentOrDependentsStr : "you"}`);
         // ------------------------------------------
         let dependencies: Package[] = [];
         try {
-            dependencies = await pkg?.getDependencies(loadDevDependencies);
+            dependencies = await pkg?.getDependencies(loadDevDependencies, loadPeerDependencies, loadOptionalDependencies);
         }
         catch (err) {
             pkg.error = true;
@@ -32,7 +32,7 @@ export default class Dependencies extends EventEmitter {
         for (const depPkg of dependencies) {
             if (!depPkg.loading && !depPkg.resolved) {
                 this.emit(Events.PACKAGE_DISCOVERED, depPkg);
-                const loadPromise = this.loadRecursive(depPkg, level + 1, depth, false);
+                const loadPromise = this.loadRecursive(depPkg, level + 1, depth, false, loadPeerDependencies, loadOptionalDependencies);
                 loadPromises.push(loadPromise);
             }
         }
@@ -40,7 +40,7 @@ export default class Dependencies extends EventEmitter {
     }
     async resolveRecursive(pkg: Package) {
         if(pkg.error) return;
-        if(pkg.existsInRegistry || pkg.existsInRegistry === TriStates.UNKNOWN) { // TODO: make sure existance determined before reaching this line
+        if(pkg.existsInRegistry || pkg.existsInRegistry === TriStates.UNKNOWN) { // TODO: make sure existence determined before reaching this line
             try {
                 await pkg.download();
             } catch (ex) {
@@ -58,8 +58,8 @@ export default class Dependencies extends EventEmitter {
             }
         }
     }
-    async load(depth: number, loadDevDependencies: boolean) {
-        await this.loadRecursive(this.rootPackage, 0, depth, loadDevDependencies);
+    async load(depth: number, loadDevDependencies: boolean, loadPeerDependencies: boolean, loadOptionalDependencies: boolean) {
+        await this.loadRecursive(this.rootPackage, 0, depth, loadDevDependencies, loadPeerDependencies, loadOptionalDependencies);
     }
 
     constructor(rootPackage: Package) {
