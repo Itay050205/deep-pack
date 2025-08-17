@@ -10,11 +10,9 @@ import Program from "./program.js";
 
 // Fix pacote types missing key - peerDependenciesMeta
 declare module "pacote" {
-    // namespace DependencyInjection {
     interface ManifestResult {
         peerDependenciesMeta: Record<string, { optional: boolean }> | null;
     }
-    // }
 }
 
 const LATEST: PackageVersion = "latest";
