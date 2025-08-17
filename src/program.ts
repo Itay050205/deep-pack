@@ -181,7 +181,7 @@ export default class Program {
         program.option(
             `-d, --max-depth <depth>`,
             "max depth. | integer bigger than 1",
-            parseInt,
+            parseFloat,
             this.options.maxDepth
         );
         program.option(`--dev, --dev-deps`, "Resolve devDependencies");
