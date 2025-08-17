@@ -175,7 +175,10 @@ export default class Program {
     }
 
     protected setArgs() {
-        program.arguments("<package_name>");
+        program.argument(
+            "<spec>",
+            "Package name(and optionally version) or path to a valid package.json. For example, next[@15] or ./package.json"
+        );
     }
 
     protected setOptions() {
