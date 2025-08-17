@@ -153,7 +153,7 @@ export default class Program {
             if (fs.existsSync(Program.outputTgzPath))
                 return console.log(`Tgz destination exists(${Program.outputTgzPath}), Skipping tgz creation...`);
 
-            t.create({ file: Program.outputTgzPath }, [...Program.downloadedPackagesPath]).then(
+            t.create({ gzip: true, file: Program.outputTgzPath }, [...Program.downloadedPackagesPath]).then(
                 async () =>
                     await Promise.all(
                         [...Program.downloadedPackagesPath].map(async (pkgPath) => await fsPromises.rm(pkgPath))
