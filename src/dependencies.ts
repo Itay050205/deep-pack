@@ -22,7 +22,7 @@ export default class Dependencies extends EventEmitter {
     ) {
         // ------------------- UI -------------------
         const dependentOrDependentsStr = pkg.dependentOrDependentsToString();
-        console.log(`requested ${pkg} by ${dependentOrDependentsStr !== "" ? dependentOrDependentsStr : "you"}`);
+        console.log(`requested ${pkg} by ${dependentOrDependentsStr || "you"}`);
         // ------------------------------------------
         let dependencies: Package[] = [];
         try {

@@ -113,9 +113,7 @@ export default class Program {
             // ------------------- UI -------------------
             const dependentOrDependentsStr = pkg.dependentOrDependentsToString();
             this.writeToShell(
-                `${pkg} resolve error. requested by: ${
-                    dependentOrDependentsStr !== "" ? dependentOrDependentsStr : "you"
-                }`,
+                `${pkg} resolve error. requested by: ${dependentOrDependentsStr || "you"}`,
                 undefined,
                 chalk.red
             );
@@ -125,9 +123,7 @@ export default class Program {
             // ------------------- UI -------------------
             const dependentOrDependentsStr = pkg.dependentOrDependentsToString();
             this.writeToShell(
-                `${pkg} download error. requested by: ${
-                    dependentOrDependentsStr !== "" ? dependentOrDependentsStr : "you"
-                }`,
+                `${pkg} download error. requested by: ${dependentOrDependentsStr || "you"}`,
                 undefined,
                 chalk.red
             );
