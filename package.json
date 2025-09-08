@@ -13,7 +13,7 @@
     "debug-test": "cd ./debug && rm -rf * && tsx ../src/deep-pack.ts \"next\"",
     "build": "tsc -p .",
     "local": "sudo npm i -g && npm-deep-pack",
-    "zpublish": "npm version patch --force && npm publish --access public",
+    "zpublish": "npm publish --access public",
     "refresh": "rm -rf ./node_modules ./package-lock.json && npm install"
   },
   "repository": {
