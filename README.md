@@ -4,7 +4,9 @@
 
 ## Installation
 
-`npm i @tar-erpedia/deep-pack -g`
+```bash
+npm i @tar-erpedia/deep-pack -g
+```
 
 ## CLI
 
@@ -14,7 +16,10 @@ By default direct dependencies and peer dependencies are resolved and downloaded
 
 ### Usage
 
-`npx npm-deep-pack <spec> [options]`
+```bash
+npx npm-deep-pack <spec> [options]
+```
+**Aliases**: `deep-pack`, `deep-pack-cli`
 <br>
 
 #### \<spec\>
@@ -34,28 +39,42 @@ By default direct dependencies and peer dependencies are resolved and downloaded
 
 #### Options
 
-`-V, --version                   output the version number`
-`-d, --max-depth <depth>         max depth. | integer bigger than 1 (default: null)`
-`--dev, --dev-deps               Resolve devDependencies`
-`--no-peer, --no-peer-deps       Don't resolve peerDependencies`
-`--optional, --optional-deps     Resolve optionalDependencies`
-`--out-deps <out>                Export dependencies list? (default: false)`
-`--out-resolved-deps <out>       Export resolved dependencies list? (default: true)`
-`-r, --resume-last-run <resume>  Resume last run?`
-`--tgz, --output-tgz             Bundle output to tgz (default: false)`
-`-h, --help`
+```
+-V, --version                   output the version number
+-d, --max-depth <depth>         max depth. | integer bigger than 1 (default: null)
+--dev, --dev-deps               Resolve devDependencies
+--no-peer, --no-peer-deps       Don't resolve peerDependencies
+--optional, --optional-deps     Resolve optionalDependencies
+--out-deps <out>                Export dependencies list? (default: false)
+--out-resolved-deps <out>       Export resolved dependencies list? (default: true)
+-r, --resume-last-run <resume>  Resume last run?
+--tgz, --output-tgz             Bundle output to tgz (default: false)
+-h, --help
+```
 
-#### Full examples
+#### Examples
 
 ###### Basic
 
-`npx npm-deep-pack vite`
+```bash
+npx npm-deep-pack vite
+```
 
 ###### With optional dependencies and output dependencies in tgz bundle
 
-`npx npm-deep-pack --optional --tgz next`
+```bash
+npx npm-deep-pack --optional --tgz next
+```
 
 
 ###### Unrecommended: No peer, only direct
 
-`npx npm-deep-pack --no-peer react-router`
+```bash
+npx npm-deep-pack --no-peer react-router
+```
+
+###### From package.json: dev and optional recommended
+
+```bash
+npx npm-deep-pack --dev --optional ../path/to/package.json
+```

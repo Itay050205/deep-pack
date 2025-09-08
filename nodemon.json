@@ -1,7 +1,0 @@
-{
-    "watch": "src/**/*.ts",
-    "execMap": {
-      "ts": "tsx",
-      "js": "tsx"
-    }
-  }  
