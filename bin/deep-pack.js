@@ -1,2 +1,2 @@
 #!/usr/bin/env node
-require("../lib/deep-pack.js");
+import "../lib/deep-pack.js";
