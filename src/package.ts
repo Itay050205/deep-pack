@@ -26,6 +26,24 @@ const Errors = {
     VERSION_DOESNT_EXIST_IN_REGISTRY: "version doesn't exist in registry",
 } as const;
 
+interface PackageLockPackage {
+    name?: string;
+    version?: string;
+    link?: boolean;
+}
+
+interface PackageLockDependency {
+    version?: string;
+    dependencies?: Record<string, PackageLockDependency>;
+}
+
+interface PackageLock {
+    name?: string;
+    version?: string;
+    packages?: Record<string, PackageLockPackage>;
+    dependencies?: Record<string, PackageLockDependency>;
+}
+
 function fullNameByNameAndVersion(name: string, version: string): PackageFullName {
     return `${name}@${version}`;
 }
@@ -81,7 +99,7 @@ export default class Package {
         if (!this.fullName) {
             throw "Not enough data to download tgz file - missing or invalid package name or version";
         }
-        if (Program.packageJsonMode && this.isRoot) return;
+        if ((Program.packageJsonMode || Program.packageLockMode) && this.isRoot) return;
 
         let triesCount = 0;
         do {
@@ -105,6 +123,10 @@ export default class Package {
         includeOptionalDependencies: boolean
     ): Promise<Package[]> {
         this.loading = true;
+
+        if (Program.packageLockMode) {
+            return this.isRoot ? this.dependencies : [];
+        }
 
         const responseBodyAsJSON = await pacote
             .manifest(Program.packageJsonMode && this.isRoot ? path.dirname(this.packageJson) : this.fullName)
@@ -220,6 +242,68 @@ export default class Package {
             const result = new Package(name, version);
             Package.cache.set(result.fullName, result);
             return result;
+        }
+    }
+
+    private static packageNameFromLockPath(packagePath: string): string | undefined {
+        const nodeModulesSegment = "node_modules/";
+        const nodeModulesIndex = packagePath.lastIndexOf(nodeModulesSegment);
+        if (nodeModulesIndex === -1) return undefined;
+
+        const packageName = packagePath.slice(nodeModulesIndex + nodeModulesSegment.length);
+        return packageName || undefined;
+    }
+
+    private static collectLockPackages(packageLock: PackageLock): Package[] {
+        const packages = new Map<PackageFullName, Package>();
+
+        if (packageLock.packages) {
+            for (const [packagePath, lockPackage] of Object.entries(packageLock.packages)) {
+                if (packagePath === "" || lockPackage.link || !lockPackage.version) continue;
+
+                const packageName = lockPackage.name ?? Package.packageNameFromLockPath(packagePath);
+                if (!packageName) continue;
+
+                const pkg = Package.fromNameAndVersion(packageName, lockPackage.version);
+                packages.set(pkg.fullName, pkg);
+            }
+        } else if (packageLock.dependencies) {
+            const collectV1Dependencies = (dependencies: Record<string, PackageLockDependency>) => {
+                for (const [packageName, dependency] of Object.entries(dependencies)) {
+                    if (dependency.version) {
+                        const pkg = Package.fromNameAndVersion(packageName, dependency.version);
+                        packages.set(pkg.fullName, pkg);
+                    }
+
+                    if (dependency.dependencies) {
+                        collectV1Dependencies(dependency.dependencies);
+                    }
+                }
+            };
+
+            collectV1Dependencies(packageLock.dependencies);
+        }
+
+        return [...packages.values()];
+    }
+
+    static async fromPackageLock(packageLockPath: string): Promise<Package | undefined> {
+        try {
+            const packageLockFile = (await fsPromises.readFile(packageLockPath)).toString();
+            const packageLock = JSON.parse(packageLockFile) as PackageLock;
+            const rootName = packageLock.name ?? "package-lock-root";
+            const rootVersion = packageLock.version ?? LATEST;
+            const rootPackage = Package.fromNameAndVersion(rootName, rootVersion);
+            rootPackage.dependencies = Package.collectLockPackages(packageLock);
+
+            for (const dependency of rootPackage.dependencies) {
+                dependency.addDependent(rootPackage);
+            }
+
+            Program.packageLockMode = true;
+            return rootPackage;
+        } catch (_ex) {
+            return undefined;
         }
     }
 
