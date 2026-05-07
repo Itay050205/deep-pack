@@ -97,6 +97,8 @@ export default class Package {
                 return `[${this.dependents.join(",")}]`;
         }
     }
+
+    // Downloads this package tarball unless it is the root package in file-based mode.
     public async download(): Promise<void> {
         if (!this.fullName) {
             throw "Not enough data to download tgz file - missing or invalid package name or version";
@@ -119,6 +121,8 @@ export default class Package {
         if (triesCount === Package.MAX_TRIES)
             throw new Error(`Downloading ${this} failed, Reached maximum retry attempts`);
     }
+
+    // Resolves this package dependencies from npm metadata or from preloaded lockfile data.
     async getDependencies(
         includeDevDependencies: boolean,
         includePeerDependencies: boolean,
@@ -226,6 +230,7 @@ export default class Package {
         return this.fullName;
     }
 
+    // Restores previously resolved packages into cache so reruns can skip finished work.
     static async fillCacheByFullNames(fullNames: PackageFullName[]) {
         for (const fullName of fullNames) {
             const pkg = await Package.fromString(fullName);
@@ -235,6 +240,7 @@ export default class Package {
         }
     }
 
+    // Returns the cached package instance for a name/version pair or creates it.
     public static fromNameAndVersion(name: string, version: string): Package {
         const fullName = fullNameByNameAndVersion(name, version);
         const cachedPkg = Package.cache.get(fullName);
@@ -247,6 +253,7 @@ export default class Package {
         }
     }
 
+    // Extracts the package name from a package-lock packages path.
     private static packageNameFromLockPath(packagePath: string): string | undefined {
         const nodeModulesSegment = "node_modules/";
         const nodeModulesIndex = packagePath.lastIndexOf(nodeModulesSegment);
@@ -256,6 +263,7 @@ export default class Package {
         return packageName || undefined;
     }
 
+    // Converts package-lock entries into Package objects, optionally including dev-only packages.
     private static collectLockPackages(packageLock: PackageLock, includeDevDependencies: boolean): Package[] {
         const packages = new Map<PackageFullName, Package>();
 
@@ -292,6 +300,7 @@ export default class Package {
         return [...packages.values()];
     }
 
+    // Creates a root package from a package-lock.json file and attaches its locked dependencies.
     static async fromPackageLock(
         packageLockPath: string,
         includeDevDependencies: boolean = false
@@ -317,6 +326,7 @@ export default class Package {
         }
     }
 
+    // Creates a package from a package.json path or an npm package spec.
     static async fromString(packageNameInAnyFormat: string): Promise<Package | undefined> {
         try {
             // Treat as path to package.json
