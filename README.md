@@ -40,6 +40,7 @@ npx npm-deep-pack <spec> [options]
 3. ##### Exact dependencies from a package-lock.json file
 
     Use `-f` or `--file` with a package-lock path.
+    Dev-only locked packages are skipped by default. Add `--dev` to include them.
 
     Valid examples: `-f package-lock.json`, `--file ../path/to/package-lock.json`
 
@@ -90,4 +91,10 @@ npx npm-deep-pack --dev --optional ../path/to/package.json
 
 ```bash
 npx npm-deep-pack -f ../path/to/package-lock.json
+```
+
+###### From package-lock.json: include dev dependencies too
+
+```bash
+npx npm-deep-pack -f ../path/to/package-lock.json --dev
 ```

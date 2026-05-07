@@ -73,7 +73,7 @@ export default class Program {
             this.resumeLastRun();
         }
         const rootPackage: Package | undefined = this.options.file
-            ? await Package.fromPackageLock(this.options.file)
+            ? await Package.fromPackageLock(this.options.file, this.options.devDeps)
             : packageUserSuppliedName
               ? await Package.fromString(packageUserSuppliedName)
               : undefined;

@@ -30,10 +30,12 @@ interface PackageLockPackage {
     name?: string;
     version?: string;
     link?: boolean;
+    dev?: boolean;
 }
 
 interface PackageLockDependency {
     version?: string;
+    dev?: boolean;
     dependencies?: Record<string, PackageLockDependency>;
 }
 
@@ -254,12 +256,13 @@ export default class Package {
         return packageName || undefined;
     }
 
-    private static collectLockPackages(packageLock: PackageLock): Package[] {
+    private static collectLockPackages(packageLock: PackageLock, includeDevDependencies: boolean): Package[] {
         const packages = new Map<PackageFullName, Package>();
 
         if (packageLock.packages) {
             for (const [packagePath, lockPackage] of Object.entries(packageLock.packages)) {
                 if (packagePath === "" || lockPackage.link || !lockPackage.version) continue;
+                if (!includeDevDependencies && lockPackage.dev) continue;
 
                 const packageName = lockPackage.name ?? Package.packageNameFromLockPath(packagePath);
                 if (!packageName) continue;
@@ -268,33 +271,38 @@ export default class Package {
                 packages.set(pkg.fullName, pkg);
             }
         } else if (packageLock.dependencies) {
-            const collectV1Dependencies = (dependencies: Record<string, PackageLockDependency>) => {
+            const collectVersion1Dependencies = (dependencies: Record<string, PackageLockDependency>) => {
                 for (const [packageName, dependency] of Object.entries(dependencies)) {
+                    if (!includeDevDependencies && dependency.dev) continue;
+
                     if (dependency.version) {
                         const pkg = Package.fromNameAndVersion(packageName, dependency.version);
                         packages.set(pkg.fullName, pkg);
                     }
 
                     if (dependency.dependencies) {
-                        collectV1Dependencies(dependency.dependencies);
+                        collectVersion1Dependencies(dependency.dependencies);
                     }
                 }
             };
 
-            collectV1Dependencies(packageLock.dependencies);
+            collectVersion1Dependencies(packageLock.dependencies);
         }
 
         return [...packages.values()];
     }
 
-    static async fromPackageLock(packageLockPath: string): Promise<Package | undefined> {
+    static async fromPackageLock(
+        packageLockPath: string,
+        includeDevDependencies: boolean = false
+    ): Promise<Package | undefined> {
         try {
             const packageLockFile = (await fsPromises.readFile(packageLockPath)).toString();
             const packageLock = JSON.parse(packageLockFile) as PackageLock;
             const rootName = packageLock.name ?? "package-lock-root";
             const rootVersion = packageLock.version ?? LATEST;
             const rootPackage = Package.fromNameAndVersion(rootName, rootVersion);
-            rootPackage.dependencies = Package.collectLockPackages(packageLock);
+            rootPackage.dependencies = Package.collectLockPackages(packageLock, includeDevDependencies);
 
             for (const dependency of rootPackage.dependencies) {
                 dependency.addDependent(rootPackage);
@@ -302,7 +310,9 @@ export default class Package {
 
             Program.packageLockMode = true;
             return rootPackage;
-        } catch (_ex) {
+        } catch (ex) {
+            const reason = ex instanceof Error ? ex.message : String(ex);
+            console.error(`Failed to read package-lock.json from "${packageLockPath}": ${reason}`);
             return undefined;
         }
     }
@@ -327,7 +337,9 @@ export default class Package {
 
             const { name, version } = await pacote.manifest(packageNameInAnyFormat);
             return Package.fromNameAndVersion(name, version);
-        } catch (_ex) {
+        } catch (ex) {
+            const reason = ex instanceof Error ? ex.message : String(ex);
+            console.error(`Failed to resolve package spec or package.json "${packageNameInAnyFormat}": ${reason}`);
             return undefined;
         }
     }
