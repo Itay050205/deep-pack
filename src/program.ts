@@ -24,7 +24,7 @@ const Files = {
 interface Options {
     maxDepth: number;
     devDeps: boolean;
-    file?: string;
+    lock?: string;
     peerDeps: boolean;
     optionalDeps: boolean;
     outDeps: boolean;
@@ -36,7 +36,7 @@ interface Options {
 const defaultOptions = {
     maxDepth: Infinity,
     devDeps: false,
-    file: undefined,
+    lock: undefined,
     peerDeps: true,
     optionalDeps: false,
     outDeps: false,
@@ -72,13 +72,13 @@ export default class Program {
         if (this.options.resumeLastRun) {
             this.resumeLastRun();
         }
-        const rootPackage: Package | undefined = this.options.file
-            ? await Package.fromPackageLock(this.options.file, this.options.devDeps)
+        const rootPackage: Package | undefined = this.options.lock
+            ? await Package.fromPackageLock(this.options.lock, this.options.devDeps)
             : packageUserSuppliedName
               ? await Package.fromString(packageUserSuppliedName)
               : undefined;
         if (!rootPackage) {
-            const invalidSpec = this.options.file ?? packageUserSuppliedName ?? "";
+            const invalidSpec = this.options.lock ?? packageUserSuppliedName ?? "";
             return this.exit(
                 ExitCodes.INVALID_PACKAGE_NAME_SUPPLIED,
                 `"${invalidSpec}" is not a valid package name or package-lock.json path`
@@ -193,7 +193,7 @@ export default class Program {
             this.options.maxDepth
         );
         program.option(`--dev, --dev-deps`, "Resolve devDependencies");
-        program.option(`-f, --file <path>`, "Path to a package-lock.json file with exact package versions");
+        program.option(`-l, --lock <path>`, "Path to a package-lock.json file with exact package versions");
         program.option(`--no-peer, --no-peer-deps`, "Don't resolve peerDependencies");
         program.option(`--optional, --optional-deps`, "Resolve optionalDependencies");
         program.option(`--out-deps <out>`, "Export dependencies list?", this.options.outDeps);
