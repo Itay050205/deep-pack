@@ -39,10 +39,10 @@ npx npm-deep-pack <spec> [options]
 
 3. ##### Exact dependencies from a package-lock.json file
 
-    Use `-f` or `--file` with a package-lock path.
+    Use `-l` or `--lock` with a package-lock path.
     Dev-only locked packages are skipped by default. Add `--dev` to include them.
 
-    Valid examples: `-f package-lock.json`, `--file ../path/to/package-lock.json`
+    Valid examples: `-l package-lock.json`, `--lock ../path/to/package-lock.json`
 
 #### Options
 
@@ -50,7 +50,7 @@ npx npm-deep-pack <spec> [options]
 -V, --version                   output the version number
 -d, --max-depth <depth>         max depth. | integer bigger than 1 (default: null)
 --dev, --dev-deps               Resolve devDependencies
--f, --file <path>               Path to a package-lock.json file with exact package versions
+-l, --lock <path>               Path to a package-lock.json file with exact package versions
 --no-peer, --no-peer-deps       Don't resolve peerDependencies
 --optional, --optional-deps     Resolve optionalDependencies
 --out-deps <out>                Export dependencies list? (default: false)
@@ -90,11 +90,11 @@ npx npm-deep-pack --dev --optional ../path/to/package.json
 ###### From package-lock.json: exact locked versions
 
 ```bash
-npx npm-deep-pack -f ../path/to/package-lock.json
+npx npm-deep-pack -l ../path/to/package-lock.json
 ```
 
 ###### From package-lock.json: include dev dependencies too
 
 ```bash
-npx npm-deep-pack -f ../path/to/package-lock.json --dev
+npx npm-deep-pack -l ../path/to/package-lock.json --dev
 ```
